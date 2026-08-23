@@ -28,8 +28,36 @@ def _ln(tag):
     return tag.split("}")[-1]
 
 
+def _owpml_hyperlink_url(field_begin):
+    """fieldBegin(type=HYPERLINK) 의 parameters 에서 URL 추출 — Path 우선, 없으면 Command 정리."""
+    for sp in field_begin.iter():
+        if _ln(sp.tag) == "stringParam" and sp.get("name") == "Path":
+            return (sp.text or "").strip()
+    for sp in field_begin.iter():
+        if _ln(sp.tag) == "stringParam" and sp.get("name") == "Command":
+            # "URL;n;n;n" 형태 — 세미콜론 뒤 메타데이터 제거
+            return (sp.text or "").split(";")[0].strip()
+    return None
+
+
 def _owpml_ptext(p):
-    return "".join("".join(t.itertext()) for t in p.iter() if _ln(t.tag) == "t")
+    """문단 텍스트 추출. HWPHYPERLINK 필드(fieldBegin~fieldEnd)는 마크다운 [텍스트](URL) 로 변환."""
+    parts = []
+    link_stack = []  # [(begin_id, url, parts에서 시작 인덱스)]
+    for el in p.iter():
+        ln = _ln(el.tag)
+        if ln == "t":
+            parts.append("".join(el.itertext()))
+        elif ln == "fieldBegin" and el.get("type") == "HYPERLINK":
+            url = _owpml_hyperlink_url(el)
+            if url:
+                link_stack.append((el.get("id"), url, len(parts)))
+        elif ln == "fieldEnd" and link_stack and el.get("beginIDRef") == link_stack[-1][0]:
+            begin_id, url, start = link_stack.pop()
+            text = "".join(parts[start:])
+            del parts[start:]
+            parts.append(f"[{text}]({url})" if text else url)
+    return "".join(parts)
 
 
 def _owpml_has_tbl(e):
