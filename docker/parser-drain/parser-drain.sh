@@ -265,12 +265,23 @@ skip_bulk(){ [ -e "$1/.parse-skipped" ] && [ "${PARSER_DRAIN_FORCE_BULK:-0}" != 
 # `00_inbox/_hold/` 도 제외 — Dr. Ben 이 손으로 떨어뜨리고 **지시할 때까지 기다리는** 대기실이다.
 # 파싱은 무해해 보이지만 _parse 산출물이 먼저 생기면 대기실이 "이미 처리 중"처럼 보이고,
 # 무엇보다 복사가 끝나기 전 파일을 집어 잘린 사본을 파싱할 수 있다. 손 자료는 지시 후에만 만진다.
+# ★ 확장자는 대소문자 무관 (2026-09-10): KIRAMS 원내 캡처·폰 스크린샷은 `.PNG`·`.JPG` 로 오는데
+#   소문자 glob 만 돌아 영원히 미파싱 → brainify 가 pending-ocr stub 을 만들고 텔레그램이 매 틱
+#   "파싱오류 stub" 을 울렸다(실측: 2026-09-08_발명신고서_스캔 / 발명신고서.PNG).
+# ★ 편집기 임시·잠금 파일 제외 (2026-09-10): Word 소유자 파일 `~$*.docx`, LibreOffice `.~lock.*#`,
+#   macOS `._*`. \\wsl.localhost 로 vault 문서를 열면 옆에 생기고 docling 이 "not valid" FAIL →
+#   .parse-error + 고아 `_parse/` 가 남는다(실측 2026-08-13 KSNM docx, 2026-09-10 TOR docx).
 candidates(){
-  local ext f
+  local ext f e
   {
-    for ext in "$@"; do for f in "$INBOX"/**/*."$ext"; do printf '%s\n' "$f"; done; done
-    for ext in "$@"; do for f in "$SOURCES_ROOT"/**/*."$ext"; do printf '%s\n' "$f"; done; done
-  } | grep -v '_parse/' | grep -v "^${INBOX}/_hold/" | awk '!seen[$0]++'
+    for ext in "$@"; do for e in "$ext" "${ext^^}"; do
+      for f in "$INBOX"/**/*."$e"; do printf '%s\n' "$f"; done
+    done; done
+    for ext in "$@"; do for e in "$ext" "${ext^^}"; do
+      for f in "$SOURCES_ROOT"/**/*."$e"; do printf '%s\n' "$f"; done
+    done; done
+  } | grep -v '_parse/' | grep -v "^${INBOX}/_hold/" \
+    | grep -v -E '/(~\$|\.~lock\.|\._)[^/]*$' | awk '!seen[$0]++'
 }
 
 # ── HWP/HWPX: 호스트-측 추출(컨테이너 우회) → refined.md 직접 생산 ──
